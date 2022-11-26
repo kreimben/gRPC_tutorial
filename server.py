@@ -1,6 +1,7 @@
+import asyncio
+import logging
 import os
 from collections import defaultdict
-from concurrent import futures
 from datetime import datetime
 
 import grpc
@@ -17,7 +18,7 @@ os.environ.setdefault('GRPC_VERBOSITY', 'debug')
 
 
 class ManySumServicer(slugs.sum_pb2_grpc.ManySumServicer):
-    def sumToTarget(self, request: SumRequest, context) -> SumResponse:
+    async def sumToTarget(self, request: SumRequest, context) -> SumResponse:
         if request.target_number is not None:
             acc = 0
             for x in range(request.target_number):
@@ -26,7 +27,7 @@ class ManySumServicer(slugs.sum_pb2_grpc.ManySumServicer):
         else:
             yield SumResponse(error=GeneralError(message='I did not get any number!'))
 
-    def exactSum(self, request: ExactSumReqeust, context) -> ExactSumResponse:
+    async def exactSum(self, request: ExactSumReqeust, context) -> ExactSumResponse:
         if request.target_number is not None:
             result = 0
             sta = defaultdict(int)
@@ -38,8 +39,8 @@ class ManySumServicer(slugs.sum_pb2_grpc.ManySumServicer):
         else:
             return ExactSumResponse(error=GeneralError('I did not get any number!'))
 
-    def testOneOf(self, request_iterator, context):
-        for new_request in request_iterator:
+    async def testOneOf(self, request_iterator, context):
+        async for new_request in request_iterator:
             new_request: HelloRequest
 
             if new_request.name == 'hello':
@@ -51,10 +52,12 @@ class ManySumServicer(slugs.sum_pb2_grpc.ManySumServicer):
 
 
 class GuessCountryServicer(slugs.server_pb2_grpc.GuessCountryServicer):
-    def geo(self, request_iterator, context):
-        for new_geo in request_iterator:
+    async def geo(self, request_iterator, context):
+        print(f'{request_iterator=}')
+        async for new_geo in request_iterator:
             if type(new_geo) == GeoRequest:
                 new_geo: GeoRequest
+                print(f'{new_geo=}')
                 lat = new_geo.latitude
                 lon = new_geo.longitude
                 g = get(f'http://api.geonames.org/countryCodeJSON?lat={lat}&lng={lon}&username=kreimben')
@@ -66,20 +69,14 @@ class GuessCountryServicer(slugs.server_pb2_grpc.GuessCountryServicer):
 
 
 class CurrentTimestampServicer(slugs.server_pb2_grpc.CurrentTimestampServicer):
-    def getCurrentTime(self, request: TimeRequest, context):
-        print(f'received: {request=}')
-
+    async def getCurrentTime(self, request: TimeRequest, context):
         if request.timezone:
             dt = datetime.now()
         else:
             dt = datetime.utcnow()
+        return TimeResponse(current_time=str(dt), tz=request.timezone)
 
-        res = TimeResponse(current_time=str(dt), tz=request.timezone)
-        print(f'before return: {res=}')
-
-        return res
-
-    def sayHello(self, request: HelloRequest, context):
+    async def sayHello(self, request: HelloRequest, context):
         res = None
         print(f'received: {request=}')
         if request.name:
@@ -90,9 +87,9 @@ class CurrentTimestampServicer(slugs.server_pb2_grpc.CurrentTimestampServicer):
         return res
 
 
-def server_init():
+async def server_init():
     print(f'server start!')
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server = grpc.aio.server()
     add_CurrentTimestampServicer_to_server(
         CurrentTimestampServicer(), server
     )
@@ -103,9 +100,10 @@ def server_init():
         ManySumServicer(), server
     )
     server.add_insecure_port('localhost:5000')
-    server.start()
-    server.wait_for_termination()
+    await server.start()
+    await server.wait_for_termination()
 
 
 if __name__ == '__main__':
-    server_init()
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(server_init())
