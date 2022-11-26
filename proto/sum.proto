@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+import "server.proto";
+
+service ManySum {
+  rpc sumToTarget(SumRequest) returns (stream SumResponse);
+  rpc exactSum(ExactSumReqeust) returns (ExactSumResponse);
+  rpc testOneOf(stream HelloRequest) returns (stream OneOfResepone);
+}
+
+message GeneralError {
+  string message = 1;
+}
+
+message SumRequest {
+  int32 target_number = 1;
+}
+
+message ExactSumReqeust {
+  repeated int32 target_number = 1;
+}
+
+message OneOfResepone {
+  oneof test_one_of {
+    string name = 1;
+    int32 number = 2;
+    GeneralError error = 3;
+  }
+}
+
+message ExactSumResponse {
+  int32 sum_number = 1;
+  map<int32, int32> statistic = 2;
+  optional GeneralError error = 3;
+}
+
+message SumResponse {
+  int32 sum_number = 1;
+  optional GeneralError error = 2;
+}
